@@ -1,0 +1,76 @@
+# UGLC Storage Lab: two-store architecture for the Unified Global Landslide Catalogue
+#   - PostgreSQL 18 + PostGIS 3.6  -> operational store (portal: V1–V4, C1–C2)
+#   - ClickHouse 26.8 LTS          -> analytical store (BNPB dashboard: B1–B5)
+#
+# Don't start this by hand: ./setup.sh does it (and picks the right PostGIS image on ARM).
+# Names and ports carry "lab" / +1 so they never clash with another UGLC stack on the same machine.
+#
+# Passwords are for a local lab only.
+
+name: uglc-lab
+
+services:
+  postgis:
+    image: ${POSTGIS_IMAGE:-postgis/postgis:18-3.6}
+    container_name: uglc-lab-postgis
+    environment:
+      POSTGRES_USER: uglc
+      POSTGRES_PASSWORD: uglc_dev_pw
+      POSTGRES_DB: uglc
+    ports:
+      - "5433:5432"
+    volumes:
+      # Postgres 18+ images: mount the PARENT directory, not /var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
+      # The CSV, read-only. Inside the container it appears under /data
+      - ./data:/data:ro
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - max_wal_size=4GB
+    # Default 64 MB /dev/shm is too small for parallel queries
+    shm_size: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uglc -d uglc"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8
+    container_name: uglc-lab-clickhouse
+    environment:
+      CLICKHOUSE_USER: uglc
+      CLICKHOUSE_PASSWORD: uglc_dev_pw
+      CLICKHOUSE_DB: uglc
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8124:8123"   # HTTP (DBeaver / JDBC / dashboards)
+      - "9001:9000"   # native protocol (clickhouse-client)
+    volumes:
+      - chdata:/var/lib/clickhouse
+      - chlogs:/var/log/clickhouse-server
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      postgis:
+        condition: service_healthy
+    # Inside this network ClickHouse reaches Postgres at host "postgis", port 5432
+
+volumes:
+  pgdata:
+  chdata:
+  chlogs:

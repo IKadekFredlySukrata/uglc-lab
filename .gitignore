@@ -1,0 +1,9 @@
+# The dataset is downloaded by setup.sh (337 MB, CC BY-NC 4.0): don't commit it
+data/*
+!data/.gitkeep
+
+# Test output is per machine
+results/*
+!results/.gitkeep
+
+.env
