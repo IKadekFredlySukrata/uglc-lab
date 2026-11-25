@@ -25,7 +25,7 @@ services:
       - pgdata:/var/lib/postgresql
       # The CSV, read-only. Inside the container it appears under /data
       - ../data:/data:ro
-      - ./initdb:/docker-entrypoint-initdb.d:ro
+      - ./initdb/01_metabase_db.sql:/docker-entrypoint-initdb.d/01_metabase_db.sql:ro
     command:
       - postgres
       - -c
