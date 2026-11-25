@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 source lib/common.sh
 
-CSV=data/UGLC_point.csv
+CSV=../data/UGLC_point.csv
 CSV_URL="https://zenodo.org/records/18643456/files/UGLC_point.csv?download=1"
 CSV_MD5=bb7cbd816944b6398a5e5bcd3a6b4bb5
 EXPECTED_ROWS=1060503

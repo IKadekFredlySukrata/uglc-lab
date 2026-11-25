@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs every test against the lab and writes the results to results/<date-time>/.
+# Runs every test against the lab and writes the results to ../results/<date-time>/.
 # Needs ./setup.sh to have run once. Takes a few minutes.
 #
 #   ./test.sh
@@ -17,7 +17,7 @@ start_stack
 setup_done || fail "The lab isn't set up yet. Run ./setup.sh first."
 
 RUN=$(date +%Y%m%d-%H%M%S)
-OUT=results/$RUN
+OUT=../results/$RUN
 mkdir -p "$OUT"
 SUMMARY=$OUT/summary.md
 TIMEFILE=$OUT/.time
