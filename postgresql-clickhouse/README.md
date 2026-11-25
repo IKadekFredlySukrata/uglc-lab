@@ -25,14 +25,14 @@ Two commands do everything: `./setup.sh` once, then `./test.sh` as often as you 
 
 ```bash
 git clone <this repo> uglc-lab
-cd uglc-lab
+cd uglc-lab/postgresql-clickhouse
 ./setup.sh      # one time, about 5 minutes: download, start, load, check
-./test.sh       # every test; prints a summary and saves it in results/
+./test.sh       # every test; prints a summary and saves it in ../results/
 ```
 
 ## What `./setup.sh` does
 
-1. Downloads `UGLC_point.csv` from Zenodo into `data/` (skipped if it's already there) and checks its MD5.
+1. Downloads `UGLC_point.csv` from Zenodo into `../data/` (skipped if it's already there) and checks its MD5.
 2. Starts the two containers. On ARM machines (such as Apple Silicon), it picks a PostGIS image that runs there.
 3. **PostgreSQL** (`setup/01–03`): loads the CSV into a text-only staging table, cleans it into
    `landslides`, then creates the view ClickHouse reads and an index for the sync.
@@ -57,7 +57,7 @@ the lab data (asking first) and builds everything again. The CSV is kept.
 | 3 | both | B4 on PostgreSQL vs ClickHouse | NFR-5 |
 | 4 | both | C1 submit, C2 edit own report (`UPDATE 1`) and someone else's (`UPDATE 0`), sync, and the time from a commit until the dashboard shows it | NFR-3, NFR-4 |
 
-Every query runs twice, and the second (warm) run is reported. Output goes to `results/<date-time>/`:
+Every query runs twice, and the second (warm) run is reported. Output goes to `../results/<date-time>/`:
 
 - `summary.md`: all the numbers, with ✅/❌ per target
 - `1_visitor_queries.txt` … `4_contributors_sync.txt`: full query plans and results
@@ -93,7 +93,7 @@ INTERVAL=60 MIN_ROWS=1 CHECK_EVERY=5 ./sync.sh   # faster settings for a demo
 User `uglc`, password `uglc_dev_pw`, database `uglc`. These are local lab passwords only.
 In Git Bash, put `winpty` in front of `docker exec -it ...`.
 
-Stop the lab with `docker compose stop` and start it again with `docker compose start`. The data is kept.
+Stop the lab with `docker compose stop` and start it again with `docker compose start` from `uglc-lab/postgresql-clickhouse`. The data is kept.
 
 ## Layout
 
@@ -102,8 +102,8 @@ setup.sh  test.sh  sync.sh     the three commands
 lib/common.sh                  shared settings and helpers
 setup/NN_<pg|ch>_*.sql         setup steps, in order; pg = PostgreSQL, ch = ClickHouse
 test/NN_<pg|ch>_*.sql          test queries; "-- @NAME" lines split a file into timed sections
-data/                          UGLC_point.csv (downloaded, not in git)
-results/                       test output (not in git)
+../data/                          UGLC_point.csv (downloaded, not in git)
+../results/                       test output (not in git)
 ```
 
 ## Troubleshooting
@@ -111,7 +111,7 @@ results/                       test output (not in git)
 - **Port already in use:** change the left-hand port in `docker-compose.yml` (5433, 8124, 9001).
 - **`$'\r': command not found` on Windows:** the scripts got Windows line endings. Run
   `git config core.autocrlf false`, then clone again. (`.gitattributes` should prevent this.)
-- **Download fails or the checksum doesn't match:** delete `data/UGLC_point.csv` and run `./setup.sh` again.
+- **Download fails or the checksum doesn't match:** delete `../data/UGLC_point.csv` and run `./setup.sh` again.
 - **Anything else:** `docker compose logs postgis` or `docker compose logs clickhouse`.
 
 ## Data licence
