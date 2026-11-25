@@ -11,7 +11,7 @@ services:
     hostname: namenode
     command: ["hdfs", "namenode"]
     ports:
-      - "9871:9870"   # web UI (9870 + 1, like the other lab)
+      - "127.0.0.1:9871:9870"   # web UI (9870 + 1, like the other lab)
     env_file: ./config
     environment:
       ENSURE_NAMENODE_DIR: "/tmp/hadoop-root/dfs/name"
