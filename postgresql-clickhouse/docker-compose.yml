@@ -25,6 +25,7 @@ services:
       - pgdata:/var/lib/postgresql
       # The CSV, read-only. Inside the container it appears under /data
       - ../data:/data:ro
+      - ./initdb:/docker-entrypoint-initdb.d:ro
     command:
       - postgres
       - -c
@@ -89,10 +90,11 @@ services:
       MB_DB_PASS: uglc_dev_pw
       MB_DB_HOST: uglc-postgis
     healthcheck:
-      test: curl --fail -I http://localhost:3000/api/health || curl --fail -I http://localhost:3001/api/health || exit 1
+      test: curl --fail -I http://localhost:3000/api/health || exit 1
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 120s
     depends_on:
       postgis:
         condition: service_healthy
