@@ -102,8 +102,8 @@ setup.sh  test.sh  sync.sh     the three commands
 lib/common.sh                  shared settings and helpers
 setup/NN_<pg|ch>_*.sql         setup steps, in order; pg = PostgreSQL, ch = ClickHouse
 test/NN_<pg|ch>_*.sql          test queries; "-- @NAME" lines split a file into timed sections
-../data/                          UGLC_point.csv (downloaded, not in git)
-../results/                       test output (not in git)
+../data/                       UGLC_point.csv (downloaded, not in git)
+../results/                    test output (not in git)
 ```
 
 ## Troubleshooting
