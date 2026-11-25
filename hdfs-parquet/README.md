@@ -29,9 +29,3 @@ Three Parquet copies are written: `landslides_flat` (sorted by id, 32 MB row gro
 - Tuning choices made here (shuffle partitions = 8, row group 32 MB, flat vs decade layout) change the numbers; keep them in the method section.
 - The setup checks the cleaned data against facts the dataset is known to have (1,060,503 rows, 109 swapped dates, 9 infinite points).
 - Row counts of V2/V3 can differ from the SQL lab if its `./test.sh` added TEST reports; the baseline has its own C1/C2 copy.
-
-## Not tested
-
-Written without being able to run Docker. Likely first-run snags: image tags (`apache/hadoop:3.4.1`, `apache/spark:3.5.3-python3`),
-datanode registration time, and the Spark container's access to `/data`. Send the output of
-`docker compose logs` or `results/hdfs-*/1_spark.log` and I'll fix it.
