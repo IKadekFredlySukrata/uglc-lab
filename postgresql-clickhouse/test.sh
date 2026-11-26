@@ -74,7 +74,7 @@ docker_mem=$(docker info --format '{{.MemTotal}}' | awk '{ printf "%.1f GB", $1 
 
 # ---------- 1. Visitor queries ----------
 
-step "1/4 Visitor queries V1–V4 on PostgreSQL, before and after the indexes (NFR-1: < 1 s)"
+step "1/5 Visitor queries V1–V4 on PostgreSQL, before and after the indexes (NFR-1: < 1 s)"
 LOG=$OUT/1_visitor_queries.txt
 V_FILE=test/01_pg_visitor_queries.sql
 IDX_FILE=test/02_pg_visitor_indexes.sql
@@ -115,7 +115,7 @@ done
 
 # ---------- 2. Dashboard queries ----------
 
-step "2/4 Dashboard queries B1–B5 on ClickHouse (NFR-2: < 5 s)"
+step "2/5 Dashboard queries B1–B5 on ClickHouse (NFR-2: < 5 s)"
 LOG=$OUT/2_dashboard_queries.txt
 B_FILE=test/03_ch_dashboard_queries.sql
 parts=$(ch_q -q "SELECT count() FROM system.parts WHERE database = 'uglc' AND table = 'landslides' AND active")
@@ -140,7 +140,7 @@ done
 
 # ---------- 3. B4 on both stores ----------
 
-step "3/4 B4 on PostgreSQL vs ClickHouse (NFR-5)"
+step "3/5 B4 on PostgreSQL vs ClickHouse (NFR-5)"
 LOG=$OUT/3_b4_comparison.txt
 {
     echo
@@ -167,7 +167,7 @@ done
 
 # ---------- 4. Contributors and sync ----------
 
-step "4/4 Contributors (C1, C2) and the sync to ClickHouse (NFR-3, NFR-4)"
+step "4/5 Contributors (C1, C2) and the sync to ClickHouse (NFR-3, NFR-4)"
 LOG=$OUT/4_contributors_sync.txt
 
 c1_out=$(pg -v run_tag="$RUN" < test/05_pg_c1_submit.sql)
@@ -244,6 +244,131 @@ for l in "${lags[@]}"; do [[ $(verdict "$l" 300000) == "✅" ]] || lag_ok="❌";
     echo "Lag measured with demo settings (check every 1 s, sync at 1 waiting row). With the defaults in"
     echo "sync.sh the dashboard lags at most INTERVAL = 5 minutes, which is the NFR-4 bound used above."
     echo "Versions > 1 is expected: ClickHouse merges them in the background; FINAL hides them now."
+} >> "$SUMMARY"
+
+# ---------- 5. Indonesia profile and clean-table conformance ----------
+
+step "5/5 Profil tanah longsor Indonesia dan konformasi tabel clean"
+LOG=$OUT/5_indonesia_profile.txt
+I_FILE=analysis/indonesia_summary.sql
+
+# Run every section once and keep the raw output for inspection.
+{
+    echo "===== Profil tanah longsor Indonesia (tanpa baris uji TEST %) ====="
+    for s in $(sections "$I_FILE"); do
+        printf '\n--- %s ---\n' "$s"
+        pg -At -F'|' <<<"$(section_sql "$I_FILE" "$s")"
+    done
+} > "$LOG"
+
+overview=$(pg -At -F'|' <<<"$(section_sql "$I_FILE" overview)")
+IFS='|' read -r in_events in_known in_fatalities in_unknown_pct in_injuries in_max_fatalities <<<"$overview"
+
+checks=$(pg -At -F'|' <<<"$(section_sql "$I_FILE" checks)")
+IFS='|' read -r ch_cols ch_pk ch_fk ch_check ch_notnull ch_geom ch_srid \
+    ch_sentinel ch_dates ch_dup ch_srid_bad ch_notpoint ch_id_geom <<<"$checks"
+
+completeness=$(pg -At -F'|' <<<"$(section_sql "$I_FILE" completeness)")
+IFS='|' read -r co_rows co_fat_pct co_type_null co_trig_null co_acc_zero \
+    co_geom_null co_notes_null co_link_null <<<"$completeness"
+
+duplicates=$(pg -At -F'|' <<<"$(section_sql "$I_FILE" duplicates)")
+IFS='|' read -r dup_pairs dup_rows <<<"$duplicates"
+
+known_pct=$(awk -v u="$in_unknown_pct" 'BEGIN { printf "%.1f", 100 - u }')
+same() { [[ $1 == "$2" ]] && echo "✅" || echo "❌"; }
+zero() { [[ $1 == 0 ]] && echo "✅" || echo "❌"; }
+
+info "Indonesia: $in_events kejadian, $in_fatalities korban dari $in_known kejadian yang diketahui"
+info "Konformasi: $ch_cols kolom, PK=$ch_pk FK=$ch_fk CHECK=$ch_check NOT NULL=$ch_notnull, geom=$ch_geom/$ch_srid"
+
+{
+    echo
+    echo "## 5. Profil tanah longsor Indonesia dan konformasi tabel clean"
+    echo
+    echo "Baris uji C1 (\`notes LIKE 'TEST %'\`) dikecualikan; jumlah baris Indonesia yang dianalisis: **$in_events**."
+    echo
+    echo "### 5.1 Konformasi dengan \`CREATE TABLE landslides\`"
+    echo
+    echo "| Pemeriksaan | Nilai | Status |"
+    echo "|---|---:|---|"
+    echo "| Jumlah kolom | $ch_cols / 20 | $(same "$ch_cols" 20) |"
+    echo "| Primary key | $ch_pk / 1 | $(same "$ch_pk" 1) |"
+    echo "| Foreign key (\`submitted_by\`) | $ch_fk / 1 | $(same "$ch_fk" 1) |"
+    echo "| CHECK (\`end_date >= start_date\`) | $ch_check / 1 | $(same "$ch_check" 1) |"
+    echo "| Kolom NOT NULL | $ch_notnull / 6 | $(same "$ch_notnull" 6) |"
+    echo "| Tipe geometri | $ch_geom | $(same "$ch_geom" Point) |"
+    echo "| SRID | $ch_srid | $(same "$ch_srid" 4326) |"
+    echo "| Baris dengan sentinel (\`ND\`, \`-99999\`) | $ch_sentinel | $(zero "$ch_sentinel") |"
+    echo "| \`end_date < start_date\` | $ch_dates | $(zero "$ch_dates") |"
+    echo "| \`id\` duplikat | $ch_dup | $(zero "$ch_dup") |"
+    echo "| SRID selain 4326 | $ch_srid_bad | $(zero "$ch_srid_bad") |"
+    echo "| Geometri selain POINT | $ch_notpoint | $(zero "$ch_notpoint") |"
+    echo "| \`geom\` NULL untuk Indonesia | $ch_id_geom | $(zero "$ch_id_geom") |"
+    echo
+    echo "### 5.2 Gambaran umum"
+    echo
+    echo "| Indikator | Nilai |"
+    echo "|---|---:|"
+    echo "| Kejadian Indonesia (UGLC) | $in_events |"
+    echo "| Kejadian dengan korban diketahui | $in_known ($known_pct%) |"
+    echo "| Kejadian tanpa angka korban | $((in_events - in_known)) ($in_unknown_pct%) |"
+    echo "| Total korban diketahui | $in_fatalities |"
+    echo "| Korban terbanyak dalam satu kejadian | $in_max_fatalities |"
+    echo "| Total luka-luka | $in_injuries |"
+    echo
+    echo "**Total korban adalah batas bawah**, karena $in_unknown_pct% baris tidak punya angka korban."
+    echo
+    echo "### 5.3 Sumber data"
+    echo
+    echo "| Sumber | Kejadian | Korban diketahui | Total korban |"
+    echo "|---|---:|---:|---:|"
+    while IFS='|' read -r src ev kn tot; do
+        printf '| %s | %s | %s | %s |\n' "$src" "$ev" "$kn" "$tot"
+    done < <(pg -At -F'|' <<<"$(section_sql "$I_FILE" sources)")
+    echo
+    echo "### 5.4 Trigger (\`physical_factors\`)"
+    echo
+    echo "| Trigger | Kejadian | Korban diketahui | Total korban |"
+    echo "|---|---:|---:|---:|"
+    while IFS='|' read -r trg ev kn tot; do
+        printf '| %s | %s | %s | %s |\n' "$trg" "$ev" "$kn" "$tot"
+    done < <(pg -At -F'|' <<<"$(section_sql "$I_FILE" triggers)")
+    echo
+    echo "### 5.5 Tipe longsor"
+    echo
+    echo "| Tipe | Kejadian | Korban diketahui | Total korban |"
+    echo "|---|---:|---:|---:|"
+    while IFS='|' read -r typ ev kn tot; do
+        printf '| %s | %s | %s | %s |\n' "$typ" "$ev" "$kn" "$tot"
+    done < <(pg -At -F'|' <<<"$(section_sql "$I_FILE" types)")
+    echo
+    echo "### 5.6 Kejadian paling mematikan (duplikat lintas sumber disembunyikan)"
+    echo
+    echo "| Tanggal | Tipe | Trigger | Korban | Luka |"
+    echo "|---|---|---|---:|---:|"
+    while IFS='|' read -r d typ trg fat inj; do
+        printf '| %s | %s | %s | %s | %s |\n' "$d" "$typ" "$trg" "$fat" "$inj"
+    done < <(pg -At -F'|' <<<"$(section_sql "$I_FILE" top)")
+    echo
+    echo "### 5.7 Kelengkapan dan duplikasi"
+    echo
+    echo "| Pemeriksaan | Nilai |"
+    echo "|---|---:|"
+    echo "| Baris dianalisis | $co_rows |"
+    echo "| \`fatalities\` diketahui | $co_fat_pct% |"
+    echo "| \`type\` NULL | $co_type_null |"
+    echo "| \`physical_factors\` NULL | $co_trig_null |"
+    echo "| \`accuracy_m = 0\` (kemungkinan tidak diketahui) | $co_acc_zero |"
+    echo "| \`geom\` NULL | $co_geom_null |"
+    echo "| \`notes\` NULL | $co_notes_null |"
+    echo "| \`link\` NULL | $co_link_null |"
+    echo "| Pasangan duplikat lintas sumber (tanggal + korban sama, <= 5 km) | $dup_pairs pasangan / $dup_rows baris |"
+    echo
+    echo "Angka di atas adalah **profil dataset UGLC**, bukan statistik resmi BNPB. Dataset ini"
+    echo "menggabungkan tiga katalog dengan cakupan berbeda, dan satu inventaris gempa Palu 2018"
+    echo "mendominasi jumlah baris tanpa mencatat korban. Query lengkap:"
+    echo "\`postgresql-clickhouse/analysis/indonesia_summary.sql\`."
 } >> "$SUMMARY"
 
 rm -f "$TIMEFILE"
